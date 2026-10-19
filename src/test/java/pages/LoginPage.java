@@ -3,6 +3,7 @@ package pages;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -10,87 +11,137 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import java.time.Duration;
 
 /**
- * LoginPage: Hepsiburada kimlik doğrulama (giriş) sayfasını temsil eden POM sınıfıdır.
- * E-posta/telefon girişi, şifre girişi ve giriş yap butonuna tıklama işlemlerini yürütür.
+ * LoginPage: Hepsiburada giriş sayfasını temsil eden
+ * Page Object Model sınıfıdır.
+ *
+ * E-posta/telefon girişi, şifre girişi ve
+ * giriş butonuna tıklama işlemlerini yönetir.
  */
 public class LoginPage {
 
     private final WebDriver driver;
     private final WebDriverWait wait;
 
-    // Kullanıcı adı / e-posta giriş alanı seçicisi
-    private final By emailInput = By.id("txtUserName");
-    // Şifre giriş alanı seçicisi
-    private final By passwordInput = By.id("txtPassword");
-    // Giriş yap onay butonu seçicisi
-    private final By submitButton = By.cssSelector("#btnLogin, button[type='submit']");
+    // E-posta veya telefon giriş alanı
+    private final By emailInput =
+            By.id("txtUserName");
+
+    // Şifre giriş alanı
+    private final By passwordInput =
+            By.id("txtPassword");
+
+    // Giriş yap butonu
+    private final By submitButton =
+            By.cssSelector(
+                    "#btnLogin, button[type='submit']"
+            );
 
     public LoginPage(WebDriver driver) {
+
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+        this.wait = new WebDriverWait(
+                driver,
+                Duration.ofSeconds(15)
+        );
     }
 
     /**
-     * Klavyeden insan yazımı hızını simüle ederek karakterleri tek tek yazar.
-     * Bu yöntem, bot tespit filtrelerinin ani metin yapıştırma hareketlerini yakalamasını engeller.
-     *
-     * @param element Metnin yazılacağı WebElement
-     * @param text    Yazılacak metin
+     * Belirtilen input alanına metin yazar.
+     * Alanın görünür ve aktif olmasını bekler.
      */
-    private void typeLikeHuman(WebElement element, String text) {
-        element.click();
-        element.clear();
-        for (char c : text.toCharArray()) {
-            element.sendKeys(String.valueOf(c));
-            try {
-                Thread.sleep(60);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+    private void enterText(By locator, String text) {
+
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Giriş alanına boş değer gönderilemez."
+            );
         }
+
+        WebElement input = wait.until(
+                ExpectedConditions.elementToBeClickable(
+                        locator
+                )
+        );
+
+        input.click();
+        input.clear();
+        input.sendKeys(text);
+
+        // Girilen değerin input'a yazıldığını doğrula.
+        wait.until(
+                ExpectedConditions.attributeToBe(
+                        locator,
+                        "value",
+                        text
+                )
+        );
     }
 
     /**
-     * Giriş sayfasında e-posta veya telefon numarası alanını bulur ve doldurur.
-     * Sayfa henüz giriş URL'sinde değilse doğrudan yönlendirme yapar.
-     *
-     * @param email Giriş yapılacak e-posta adresi
+     * Giriş sayfasında e-posta/telefon alanını doldurur.
      */
     public void enterEmail(String email) {
-        if (!driver.getCurrentUrl().contains("giris.hepsiburada.com")) {
-            driver.get("https://giris.hepsiburada.com");
+
+        // Gerçekten giriş sayfasında mıyız?
+        if (!driver.getCurrentUrl().contains(
+                "giris.hepsiburada.com")) {
+
+            throw new IllegalStateException(
+                    "Giriş sayfasında değiliz. " +
+                            "Önce ana sayfadan Giriş Yap butonuna tıklanmalı."
+            );
         }
 
-        WebElement input = wait.until(ExpectedConditions.visibilityOfElementLocated(emailInput));
-        typeLikeHuman(input, email);
-        try { Thread.sleep(400); } catch (InterruptedException ignored) {}
+        enterText(emailInput, email);
     }
 
     /**
-     * Şifre alanını bulur ve güvenli şekilde şifreyi girer.
-     *
-     * @param password Kullanıcı şifresi
+     * Şifre alanını doldurur.
      */
     public void enterPassword(String password) {
-        WebElement input = wait.until(ExpectedConditions.visibilityOfElementLocated(passwordInput));
-        typeLikeHuman(input, password);
-        try { Thread.sleep(400); } catch (InterruptedException ignored) {}
+
+        enterText(passwordInput, password);
     }
 
     /**
-     * 'Giriş Yap' butonuna tıklar ve girişin tamamlanıp ana sayfaya geri dönülmesini bekler.
+     * Giriş Yap butonuna tıklar.
+     * Giriş sayfasından yönlendirmeyi bekler.
      */
     public void submitLogin() {
-        WebElement button = wait.until(ExpectedConditions.elementToBeClickable(submitButton));
+
+        WebElement button = wait.until(
+                ExpectedConditions.elementToBeClickable(
+                        submitButton
+                )
+        );
+
         try {
             button.click();
-        } catch (Exception e) {
-            new Actions(driver).moveToElement(button).click().perform();
+
+        } catch (ElementClickInterceptedException e) {
+
+            // Tıklama başka bir element tarafından engellenirse
+            // Actions üzerinden tekrar dene.
+            button = wait.until(
+                    ExpectedConditions.elementToBeClickable(
+                            submitButton
+                    )
+            );
+
+            new Actions(driver)
+                    .moveToElement(button)
+                    .click()
+                    .perform();
         }
 
-        // Giriş tamamlandıktan sonra giriş URL'sinden çıkılmasını bekle
-        try {
-            wait.until(ExpectedConditions.not(ExpectedConditions.urlContains("giris.hepsiburada.com")));
-        } catch (Exception ignored) {}
+        // Giriş sayfasından çıkılmasını bekle.
+        wait.until(
+                ExpectedConditions.not(
+                        ExpectedConditions.urlContains(
+                                "giris.hepsiburada.com"
+                        )
+                )
+        );
     }
 }

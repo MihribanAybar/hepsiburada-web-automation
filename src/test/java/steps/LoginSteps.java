@@ -1,14 +1,18 @@
 package steps;
 
 import com.thoughtworks.gauge.Step;
-import org.junit.Assert;
 import pages.HomePage;
 import pages.LoginPage;
 import support.DriverFactory;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
- * LoginSteps: Hepsiburada giriş (login) işlemi ile ilgili Gauge adım uygulamalarını içerir.
- * Kullanıcı kimlik bilgilerinin girilmesi ve girişin başarılı olduğunun doğrulanmasını yönetir.
+ * LoginSteps: Hepsiburada giriş işlemlerini yöneten
+ * Gauge Step Implementation sınıfıdır.
+ *
+ * Kullanıcı bilgilerini ortam değişkenlerinden alır
+ * ve başarılı giriş işlemini doğrular.
  */
 public class LoginSteps {
 
@@ -16,48 +20,73 @@ public class LoginSteps {
     private HomePage homePage;
 
     /**
-     * LoginPage sayfa nesnesini döner; henüz oluşturulmamışsa aktif WebDriver ile başlatır.
-     *
-     * @return LoginPage nesnesi
+     * LoginPage nesnesini ihtiyaç olduğunda oluşturur.
      */
     private LoginPage getLoginPage() {
+
         if (loginPage == null) {
-            loginPage = new LoginPage(DriverFactory.getDriver());
+            loginPage = new LoginPage(
+                    DriverFactory.getDriver()
+            );
         }
+
         return loginPage;
     }
 
     /**
-     * HomePage sayfa nesnesini döner.
-     *
-     * @return HomePage nesnesi
+     * HomePage nesnesini ihtiyaç olduğunda oluşturur.
      */
     private HomePage getHomePage() {
+
         if (homePage == null) {
-            homePage = new HomePage(DriverFactory.getDriver());
+            homePage = new HomePage(
+                    DriverFactory.getDriver()
+            );
         }
+
         return homePage;
     }
 
     /**
-     * 3. Adım: Geçerli kullanıcı adı/e-posta ve şifreyi ilgili alanlara girer ve 'Giriş Yap' butonuna basar.
+     * Geçerli kullanıcı bilgileriyle giriş yapar.
      */
     @Step("Geçerli kullanıcı bilgileriyle giriş yap")
     public void loginWithValidCredentials() {
-        getLoginPage().enterEmail("yirmiyedisubat26@gmail.com");
-        getLoginPage().enterPassword("Mihriban123");
+
+        String email = System.getenv("HB_EMAIL");
+        String password = System.getenv("HB_PASSWORD");
+
+        assertThat(email)
+                .as("HB_EMAIL ortam değişkeni tanımlanmalıdır.")
+                .isNotBlank();
+
+        assertThat(password)
+                .as("HB_PASSWORD ortam değişkeni tanımlanmalıdır.")
+                .isNotBlank();
+
+        getLoginPage().enterEmail(email);
+        getLoginPage().enterPassword(password);
         getLoginPage().submitLogin();
+
+        System.out.println(
+                "Giriş işlemi gerçekleştirildi."
+        );
     }
 
     /**
-     * Beklenen Sonuç (Assertion 1): Kullanıcının sisteme başarıyla giriş yaptığını
-     * (sağ üstteki hesap alanının güncellendiğini) doğrular.
+     * Giriş işleminin başarılı olduğunu doğrular.
      */
     @Step("Kullanıcının başarılı şekilde giriş yaptığını doğrula")
     public void verifyLogin() {
-        Assert.assertTrue(
-                "Kullanıcı başarılı şekilde login olmalıdır.",
+
+        assertThat(
                 getHomePage().isLoggedIn()
+        )
+                .as("Kullanıcı başarılı şekilde giriş yapmış olmalıdır.")
+                .isTrue();
+
+        System.out.println(
+                "Kullanıcı giriş kontrolü tamamlandı."
         );
     }
 }

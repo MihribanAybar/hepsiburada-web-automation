@@ -1,7 +1,15 @@
+# Sepetteki eski ürünleri temizle ve boş olduğunu doğrula
+Bu konsept; kullanıcı giriş yaptıktan sonra sepette önceki
+testlerden kalan ürünleri temizler ve sepetin boş olduğunu doğrular.
+
+* Sepetteki eski ürünleri temizle
+* Sepetin boş olduğunu doğrula
+
+
 # Ürünü sepete ekle ve sepette olduğunu doğrula
 Bu konsept; ürün detay sayfasındaki ürün adı ve fiyatının kaydedilmesini,
-"Sepete Ekle" butonunun aktifliğinin kontrol edilmesini, sepete ekleme işlemini,
-sepetin açılmasını ve sepette ürün adı, fiyat ve adedinin (1 adet) birebir doğrulanmasını sağlar.
+Sepete Ekle butonunun kontrol edilmesini, ürünün sepete eklenmesini
+ve sepette yalnızca seçilen üründen 1 adet bulunduğunun doğrulanmasını sağlar.
 
 * Ürün adını kaydet
 * Ürün fiyatını kaydet
@@ -9,6 +17,6 @@ sepetin açılmasını ve sepette ürün adı, fiyat ve adedinin (1 adet) birebi
 * Sepete Ekle butonuna tıkla
 * Sepete eklendiğine dair onay mesajını gör
 * Header'daki sepet ikonuna tıkla
-* Sepette ürün adedinin 1 olduğunu doğrula değilse 1 yap
+* Sepette yalnızca 1 ürün ve 1 adet olduğunu doğrula
 * Sepette gösterilen ürün adının detay sayfasındakiyle eşleştiğini doğrula
 * Sepetteki ürün fiyatının detay sayfasındakiyle eşleştiğini doğrula

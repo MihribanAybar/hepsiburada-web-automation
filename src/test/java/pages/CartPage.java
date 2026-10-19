@@ -1,372 +1,901 @@
+
 package pages;
 
 import org.openqa.selenium.By;
-import org.openqa.selenium.Keys;
+import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.math.BigDecimal;
 import java.time.Duration;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * CartPage: Hepsiburada sepetim (checkout/sepetim) sayfasını temsil eden POM sınıfıdır.
- * Sepeti açma, sepetteki ürün adını ve fiyatını okuma, ürün adedini kontrol edip 1 yapma
- * ve ürün detay sayfasıyla birebir doğrulama işlevlerini yürütür.
+ * CartPage: Hepsiburada sepet islemleri.
+ *
+ * - Header sepet sayisini kontrol eder.
+ * - Eski urunleri temizler.
+ * - Sepete ekleme modalinden sepete gider.
+ * - Urun adi, fiyat ve adet bilgilerini dogrular.
+ *
+ * Thread.sleep kullanilmaz.
  */
 public class CartPage {
+
+    private static final String HOME_URL =
+            "https://www.hepsiburada.com/";
+
+    private static final String CHECKOUT_URL =
+            "https://checkout.hepsiburada.com/";
 
     private final WebDriver driver;
     private final WebDriverWait wait;
 
-    // Header üzerindeki sepet bağlantısı seçicisi
-    private final By cartLink = By.cssSelector("#shoppingCart, a[href*='sepetim'], a[href*='checkout.hepsiburada.com']");
-    // Çerez onaylama butonu seçicisi
-    private final By cookieAcceptBtn = By.id("onetrust-accept-btn-handler");
+    private final By headerCartCount =
+            By.id("cartItemCount");
+
+    private final By cartLink = By.cssSelector(
+            "a[href*='checkout.hepsiburada.com/sepetim'], " +
+                    "a[href*='/sepetim']"
+    );
+
+    private final By cookieAcceptBtn =
+            By.id("onetrust-accept-btn-handler");
+
+    private final By addToCartModal = By.cssSelector(
+            "[data-test-class='modal_overflow']"
+    );
+
+    private final By modalGoToCartButton = By.xpath(
+            "//*[normalize-space(.)='Sepete git' " +
+                    "and not(.//*[normalize-space(.)='Sepete git'])]"
+    );
+
+    private final By deleteAllProductsButton = By.xpath(
+            "//div[starts-with(@class,'basket_delete_') " +
+                    "and normalize-space(.)='Ürünleri sil']"
+    );
+
+    private final By confirmDeleteAllButton = By.xpath(
+            "//*[normalize-space(.)='Tümünü sil' " +
+                    "and not(.//*[normalize-space(.)='Tümünü sil'])]"
+    );
+
+    private final By[] cartRowLocators = {
+            By.cssSelector("[data-test-id='cart-item']"),
+            By.cssSelector("[data-test-id='basket-item']"),
+            By.cssSelector(
+                    "[data-test-id='basket-item-container']"
+            ),
+            By.cssSelector("li[class*='basket_item']"),
+            By.cssSelector("div[class*='basket_item']"),
+            By.cssSelector("div[class*='BasketItem']"),
+            By.cssSelector("div[class*='CartItem']")
+    };
+
+    private final By productName = By.cssSelector(
+            "[data-test-id*='product-name'], " +
+                    "[class*='product_name'], " +
+                    "[class*='productName'], " +
+                    "[class*='product_title'], " +
+                    "[class*='itemTitle'], " +
+                    "a[href*='-p-'], a[href*='/p/']"
+    );
+
+    /*
+     * GERCEK URUN SATIRI FIYATI
+     *
+     * DevTools'ta dogrulanan HTML:
+     *
+     * <div class="product_price_uXU6Q">
+     *     44.042,24 TL
+     * </div>
+     *
+     * Kazancini gor, eski fiyat ve
+     * indirim kapsayicilari secilmez.
+     */
+    private final By productPrice = By.cssSelector(
+            "div[class^='product_price_'], " +
+                    "div[class*=' product_price_']"
+    );
+
+    private final By quantitySelect = By.cssSelector(
+            "select[name*='quantity'], " +
+                    "select[class*='quantity'], " +
+                    "select[data-test-id*='quantity']"
+    );
+
+    private final By quantityInput = By.cssSelector(
+            "input[name*='quantity'], " +
+                    "input[class*='quantity'], " +
+                    "input[data-test-id*='quantity']"
+    );
+
+    private final By quantityText = By.cssSelector(
+            "[data-test-id*='quantity'], " +
+                    "[class*='quantityValue'], " +
+                    "[class*='quantity-value']"
+    );
+
+    /*
+     * Yalnizca tek bir fiyat tutarini kabul eder.
+     *
+     * Gecerli:
+     * 35.999,00 TL
+     * 999,90 TL
+     * 44.042 TL
+     *
+     * Gecersiz:
+     * Kazancini gor / 3.000 TL / 35.999 TL
+     */
+    private static final Pattern SINGLE_PRICE_PATTERN =
+            Pattern.compile(
+                    "^\\s*(" +
+                            "(?:\\d{1,3}(?:\\.\\d{3})+|\\d+)" +
+                            "(?:,\\d{2})?" +
+                            ")\\s*(?:TL|₺)\\s*$",
+                    Pattern.CASE_INSENSITIVE
+            );
 
     public CartPage(WebDriver driver) {
+
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+
+        this.wait = new WebDriverWait(
+                driver,
+                Duration.ofSeconds(20)
+        );
     }
 
     /**
-     * Sepet sayfasında varsa çerez bildirimini kabul eder.
+     * Cerez bildirimi varsa kabul eder.
      */
     public void acceptCookiesIfExists() {
-        try {
-            List<WebElement> buttons = driver.findElements(cookieAcceptBtn);
-            if (!buttons.isEmpty() && buttons.get(0).isDisplayed()) {
-                buttons.get(0).click();
+
+        for (WebElement element :
+                driver.findElements(cookieAcceptBtn)) {
+
+            try {
+
+                if (element.isDisplayed()
+                        && element.isEnabled()) {
+
+                    element.click();
+                    return;
+                }
+
+            } catch (StaleElementReferenceException ignored) {
+                // DOM degismis olabilir.
             }
-        } catch (Exception ignored) {}
+        }
     }
 
     /**
-     * Header'daki sepet ikonuna tıklayarak sepet sayfasına gider.
-     * Tıklama gecikirse doğrudan checkout sepet URL'sine yönlendirir.
+     * Sepete ekleme modalini kontrol eder.
+     */
+    private boolean isAddToCartModalVisible() {
+
+        for (WebElement modal :
+                driver.findElements(addToCartModal)) {
+
+            try {
+
+                if (modal.isDisplayed()) {
+                    return true;
+                }
+
+            } catch (StaleElementReferenceException ignored) {
+                // Sonraki denemede yeniden aranir.
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Modal icindeki Sepete git butonunu bulur.
+     */
+    private WebElement findVisibleModalCartButton() {
+
+        for (WebElement element :
+                driver.findElements(modalGoToCartButton)) {
+
+            try {
+
+                if (!element.isDisplayed()
+                        || !element.isEnabled()) {
+                    continue;
+                }
+
+                List<WebElement> parents =
+                        element.findElements(
+                                By.xpath(
+                                        "./ancestor-or-self::*[" +
+                                                "self::button or self::a " +
+                                                "or @role='button'][1]"
+                                )
+                        );
+
+                if (!parents.isEmpty()) {
+
+                    WebElement parent = parents.get(0);
+
+                    if (parent.isDisplayed()
+                            && parent.isEnabled()) {
+                        return parent;
+                    }
+                }
+
+                return element;
+
+            } catch (StaleElementReferenceException ignored) {
+                // Modal yeniden cizilmis olabilir.
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Gercek sepet sayfasinin yuklendigini kontrol eder.
+     *
+     * Sepet adresi /sepetim veya checkout kok adresi
+     * olabilir. Bu nedenle sepet elementini de arar.
+     *
+     * Bu kontrol dolu sepet icin kullanilir.
+     */
+    private boolean isCartPageLoadedNow() {
+
+        String currentUrl = driver.getCurrentUrl();
+
+        if (!currentUrl.startsWith(CHECKOUT_URL)) {
+            return false;
+        }
+
+        for (WebElement element :
+                driver.findElements(deleteAllProductsButton)) {
+
+            try {
+
+                if (element.isDisplayed()) {
+                    return true;
+                }
+
+            } catch (StaleElementReferenceException ignored) {
+                // Sayfa yeniden yukleniyor olabilir.
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Sepet sayfasini acar.
+     *
+     * Modal varsa Sepete git butonunu kullanir.
+     * Modal yoksa header Sepetim baglantisina tiklar.
      */
     public void openCart() {
-        try {
-            if (!driver.getCurrentUrl().contains("sepetim")) {
-                try {
-                    WebElement cart = wait.until(ExpectedConditions.elementToBeClickable(cartLink));
-                    cart.click();
-                } catch (Exception e) {
-                    driver.get("https://checkout.hepsiburada.com/sepetim");
-                }
-            }
-        } catch (Exception e) {
-            driver.get("https://checkout.hepsiburada.com/sepetim");
+
+        if (isCartPageLoadedNow()) {
+
+            System.out.println(
+                    "Sepet sayfası zaten açık ve yüklü."
+            );
+
+            return;
         }
 
-        // Sepet URL'sinin yüklenmesini bekle
+        WebElement modalButton =
+                findVisibleModalCartButton();
+
+        boolean modalVisible =
+                isAddToCartModalVisible();
+
+        if (modalButton != null || modalVisible) {
+
+            System.out.println(
+                    "Sepete ekleme penceresi algılandı."
+            );
+
+            WebElement goToCartButton = wait.until(
+                    webDriver ->
+                            findVisibleModalCartButton()
+            );
+
+            goToCartButton.click();
+
+            System.out.println(
+                    "Modal içindeki Sepete git butonuna tıklandı."
+            );
+
+        } else {
+
+            WebElement headerButton = wait.until(
+                    ExpectedConditions.elementToBeClickable(
+                            cartLink
+                    )
+            );
+
+            headerButton.click();
+
+            System.out.println(
+                    "Header'daki Sepetim bağlantısına tıklandı."
+            );
+        }
+
         try {
-            wait.until(ExpectedConditions.urlContains("sepetim"));
-        } catch (Exception ignored) {}
+
+            wait.until(webDriver ->
+                    isCartPageLoadedNow()
+            );
+
+        } catch (TimeoutException e) {
+
+            throw new IllegalStateException(
+                    "Sepete git işleminden sonra " +
+                            "gerçek sepet ekranı yüklenmedi. URL: " +
+                            driver.getCurrentUrl(),
+                    e
+            );
+        }
 
         acceptCookiesIfExists();
+
+        System.out.println(
+                "Sepet sayfası doğrulandı: " +
+                        driver.getCurrentUrl()
+        );
     }
 
     /**
-     * Sepet sayfasındaki ürün kartlarından ürün adını okur.
-     * Farklı tema ve DOM yapılarındaki bağlantı ve başlık etiketlerini sırayla tarar.
+     * Header sepet sayisini bekleme olmadan okur.
+     */
+    private int readHeaderCartCountNow() {
+
+        for (WebElement element :
+                driver.findElements(headerCartCount)) {
+
+            try {
+
+                String value = element.getText().trim();
+
+                if (value.isBlank()) {
+
+                    value = element.getAttribute(
+                            "textContent"
+                    );
+
+                    if (value == null) {
+                        return -1;
+                    }
+
+                    value = value.trim();
+                }
+
+                if (value.matches("\\d+")) {
+                    return Integer.parseInt(value);
+                }
+
+            } catch (StaleElementReferenceException ignored) {
+                return -1;
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Header sepet sayisinin okunmasini bekler.
+     */
+    public int getHeaderCartCount() {
+
+        return wait.until(webDriver -> {
+
+            int count = readHeaderCartCountNow();
+
+            return count >= 0 ? count : null;
+        });
+    }
+
+    /**
+     * Baslangicta sepeti kontrol eder.
      *
-     * @return Sepetteki ürün adı metni
+     * Bos ise sepete girmez.
+     * Dolu ise tum eski urunleri temizler.
+     */
+    public void clearCart() {
+
+        int initialCount = getHeaderCartCount();
+
+        System.out.println(
+                "Başlangıç sepet ürün sayısı: " +
+                        initialCount
+        );
+
+        if (initialCount == 0) {
+
+            System.out.println(
+                    "Sepet zaten boş. Sepet sayfasına girilmiyor."
+            );
+
+            return;
+        }
+
+        System.out.println(
+                "Sepette ürün var. Temizleme başlıyor."
+        );
+
+        openCart();
+
+        WebElement deleteButton = wait.until(
+                ExpectedConditions.elementToBeClickable(
+                        deleteAllProductsButton
+                )
+        );
+
+        deleteButton.click();
+
+        System.out.println(
+                "Ürünleri sil butonuna tıklandı."
+        );
+
+        WebElement confirmButton = wait.until(
+                ExpectedConditions.elementToBeClickable(
+                        confirmDeleteAllButton
+                )
+        );
+
+        confirmButton.click();
+
+        System.out.println(
+                "Tümünü sil butonuna tıklandı."
+        );
+
+        wait.until(
+                ExpectedConditions.invisibilityOfElementLocated(
+                        confirmDeleteAllButton
+                )
+        );
+
+        driver.navigate().to(HOME_URL);
+
+        try {
+
+            wait.until(webDriver ->
+                    readHeaderCartCountNow() == 0
+            );
+
+        } catch (TimeoutException e) {
+
+            throw new IllegalStateException(
+                    "Sepet temizlendikten sonra " +
+                            "header sayısı 0 olmadı. Son değer: " +
+                            readHeaderCartCountNow(),
+                    e
+            );
+        }
+
+        System.out.println(
+                "Sepet temizlendi. Header ürün sayısı: 0"
+        );
+    }
+
+    /**
+     * Sepetin boslugunu header uzerinden dogrular.
+     */
+    public boolean isCartEmpty() {
+
+        try {
+
+            return getHeaderCartCount() == 0;
+
+        } catch (TimeoutException e) {
+
+            return false;
+        }
+    }
+
+    /**
+     * Gorunur sepet urun satirlarini bulur.
+     */
+    private List<WebElement> getCartRows() {
+
+        for (By locator : cartRowLocators) {
+
+            List<WebElement> rows = new ArrayList<>();
+
+            for (WebElement element :
+                    driver.findElements(locator)) {
+
+                try {
+
+                    if (element.isDisplayed()) {
+                        rows.add(element);
+                    }
+
+                } catch (StaleElementReferenceException ignored) {
+                    // DOM degismis olabilir.
+                }
+            }
+
+            if (!rows.isEmpty()) {
+                return rows;
+            }
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * Urun satirlarinin yuklenmesini bekler.
+     */
+    private void waitForCartProducts() {
+
+        wait.until(webDriver ->
+                !getCartRows().isEmpty()
+        );
+    }
+
+    public int getCartProductCount() {
+
+        waitForCartProducts();
+
+        return getCartRows().size();
+    }
+
+    /**
+     * Ilk urun satirini dondurur.
+     */
+    private WebElement getFirstCartRow() {
+
+        waitForCartProducts();
+
+        List<WebElement> rows = getCartRows();
+
+        if (rows.isEmpty()) {
+
+            throw new IllegalStateException(
+                    "Sepette ürün satırı bulunamadı."
+            );
+        }
+
+        return rows.get(0);
+    }
+
+    /**
+     * Sepetteki urun adini okur.
      */
     public String getCartProductName() {
-        acceptCookiesIfExists();
-        // 1. Doğrudan ürün başlık/bağlantı seçicileri
-        List<WebElement> nameElements = driver.findElements(By.cssSelector(
-                "[data-test-id*='product-name'], [class*='product_name'], [class*='productName'], " +
-                "[class*='product_title'], [class*='item_title'], [class*='itemTitle'], " +
-                "a[href*='-p-'], a[href*='/p/'], a[href*='hepsiburada.com'], " +
-                "div[class*='product'] h3, div[class*='product'] a, div[class*='item'] a"
-        ));
-        for (WebElement el : nameElements) {
-            try {
-                if (el.isDisplayed() && !el.getText().isBlank()) {
-                    String text = el.getText().trim();
-                    if (text.length() > 5) {
-                        System.out.println(">>> Sepetteki ürün adı bulundu: " + text);
-                        return text;
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
 
-        // 2. Sepet satırları içerisindeki genel metin blokları
-        try {
-            List<WebElement> items = driver.findElements(By.cssSelector("li[class*='item'], div[class*='basket_item'], div[class*='merchant'] ~ div"));
-            for (WebElement item : items) {
-                if (item.isDisplayed()) {
-                    List<WebElement> textEls = item.findElements(By.cssSelector("a, h3, h4, p, span"));
-                    for (WebElement t : textEls) {
-                        String txt = t.getText().trim();
-                        if (txt.length() > 10 && !txt.contains("TL") && !txt.contains("Kargo")) {
-                            System.out.println(">>> Sepetteki ürün adı satır içi bulundu: " + txt);
-                            return txt;
-                        }
-                    }
+        WebElement row = getFirstCartRow();
+
+        for (WebElement element :
+                row.findElements(productName)) {
+
+            if (element.isDisplayed()) {
+
+                String name = element.getText().trim();
+
+                if (!name.isBlank()) {
+                    return name;
                 }
             }
-        } catch (Exception ignored) {}
+        }
 
-        return "";
+        throw new IllegalStateException(
+                "Sepetteki ürün adı bulunamadı."
+        );
     }
 
     /**
-     * Sepet ekranındaki ürünün satış fiyatını okur (ör. "79.999,00 TL").
+     * Sepetteki urun satirinin TEK satis fiyatini okur.
      *
-     * @return Sepetteki fiyat metni
+     * Indirim metni, eski fiyat ve
+     * "Kazancini gor" kapsayicisi kabul edilmez.
      */
     public String getCartProductPrice() {
-        acceptCookiesIfExists();
-        List<WebElement> priceElements = driver.findElements(By.cssSelector(
-                "[class*='price'], [class*='Price'], [data-test-id*='price'], " +
-                "[class*='basket_price'], [class*='product_price'], [class*='itemPrice']"
-        ));
-        for (WebElement el : priceElements) {
-            try {
-                if (el.isDisplayed() && el.getText().contains("TL")) {
-                    String priceText = el.getText().trim();
-                    System.out.println(">>> Sepetteki ürün fiyatı: " + priceText);
-                    return priceText;
-                }
-            } catch (Exception ignored) {}
-        }
+
         try {
-            List<WebElement> elements = driver.findElements(By.xpath("//*[contains(text(),'TL') and not(self::script)]"));
-            for (WebElement el : elements) {
-                if (el.isDisplayed() && el.getText().matches(".*\\d+.*TL.*")) {
-                    return el.getText().trim();
+
+            String price = wait.withMessage(
+                    "Sepet ürün satırında tek satış " +
+                            "fiyatı içeren product_price_ " +
+                            "elementi bulunamadı."
+            ).until(webDriver -> {
+
+                try {
+
+                    WebElement row = getFirstCartRow();
+
+                    List<WebElement> priceElements =
+                            row.findElements(productPrice);
+
+                    for (WebElement element : priceElements) {
+
+                        if (!element.isDisplayed()) {
+                            continue;
+                        }
+
+                        String text = element.getText()
+                                .trim()
+                                .replace('\u00A0', ' ');
+
+                        // Yalnizca tek tutardan olusan
+                        // metin kabul edilir.
+                        if (SINGLE_PRICE_PATTERN
+                                .matcher(text)
+                                .matches()) {
+
+                            return text;
+                        }
+                    }
+
+                    return null;
+
+                } catch (StaleElementReferenceException e) {
+
+                    return null;
+                }
+            });
+
+            System.out.println(
+                    "Sepetteki gerçek ürün fiyatı: " + price
+            );
+
+            return price;
+
+        } catch (TimeoutException e) {
+
+            throw new IllegalStateException(
+                    "Sepetteki ürünün tek satış fiyatı " +
+                            "okunamadı. product_price_ locator'ını " +
+                            "ürün satırının HTML'iyle kontrol edin.",
+                    e
+            );
+        }
+    }
+
+    /**
+     * Metinleri karsilastirma icin normalize eder.
+     */
+    private String normalizeText(String text) {
+
+        return text.toLowerCase(
+                        Locale.forLanguageTag("tr-TR")
+                )
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .trim()
+                .replaceAll("\\s+", " ");
+    }
+
+    /**
+     * Kaydedilen urun adiyla sepet adini karsilastirir.
+     *
+     * Mevcut kismi eslesme davranisi korunmustur.
+     */
+    public boolean isProductNameMatching(
+            String expectedTitle) {
+
+        if (expectedTitle == null
+                || expectedTitle.isBlank()) {
+
+            return false;
+        }
+
+        String actualTitle = getCartProductName();
+
+        String expected = normalizeText(expectedTitle);
+        String actual = normalizeText(actualTitle);
+
+        return !actual.isBlank()
+                && (actual.equals(expected)
+                || actual.contains(expected));
+    }
+
+    public boolean containsProduct(String expectedName) {
+
+        try {
+
+            return wait.until(webDriver ->
+                    isProductNameMatching(expectedName)
+            );
+
+        } catch (TimeoutException e) {
+
+            return false;
+        }
+    }
+
+    /**
+     * Yalnizca tek TL fiyati kabul ederek
+     * BigDecimal degerine cevirir.
+     */
+    private BigDecimal parsePrice(String text) {
+
+        if (text == null) {
+
+            throw new IllegalArgumentException(
+                    "Fiyat null olamaz."
+            );
+        }
+
+        String normalized =
+                text.replace('\u00A0', ' ').trim();
+
+        Matcher matcher =
+                SINGLE_PRICE_PATTERN.matcher(normalized);
+
+        if (!matcher.matches()) {
+
+            throw new IllegalArgumentException(
+                    "Metin tek bir satış fiyatı değil: " +
+                            normalized
+            );
+        }
+
+        String amount = matcher.group(1)
+                .replace(".", "")
+                .replace(",", ".");
+
+        return new BigDecimal(amount);
+    }
+
+    /**
+     * Detay ve sepet satis fiyatlarini karsilastirir.
+     */
+    public boolean isPriceMatching(
+            String expectedPrice,
+            String actualPrice) {
+
+        if (expectedPrice == null
+                || actualPrice == null
+                || expectedPrice.isBlank()
+                || actualPrice.isBlank()) {
+
+            return false;
+        }
+
+        try {
+
+            BigDecimal expected =
+                    parsePrice(expectedPrice);
+
+            BigDecimal actual =
+                    parsePrice(actualPrice);
+
+            System.out.println(
+                    "Beklenen satış fiyatı: " +
+                            expectedPrice
+            );
+
+            System.out.println(
+                    "Sepet satış fiyatı: " +
+                            actualPrice
+            );
+
+            return expected.compareTo(actual) == 0;
+
+        } catch (IllegalArgumentException e) {
+
+            System.out.println(
+                    "Fiyat doğrulama hatası: " +
+                            e.getMessage()
+            );
+
+            return false;
+        }
+    }
+
+    /**
+     * Sepetteki urun miktarini okur.
+     */
+    private int getQuantity() {
+
+        WebElement row = getFirstCartRow();
+
+        for (WebElement element :
+                row.findElements(quantitySelect)) {
+
+            if (element.isDisplayed()) {
+
+                return extractQuantity(
+                        new Select(element)
+                                .getFirstSelectedOption()
+                                .getText()
+                );
+            }
+        }
+
+        for (WebElement element :
+                row.findElements(quantityInput)) {
+
+            if (element.isDisplayed()) {
+
+                return extractQuantity(
+                        element.getAttribute("value")
+                );
+            }
+        }
+
+        for (WebElement element :
+                row.findElements(quantityText)) {
+
+            if (element.isDisplayed()) {
+
+                int quantity =
+                        extractQuantity(element.getText());
+
+                if (quantity >= 0) {
+                    return quantity;
                 }
             }
-        } catch (Exception ignored) {}
-        return "";
+        }
+
+        return -1;
     }
 
     /**
-     * Sepetteki ürün adının ürün detay sayfasındaki ürün adıyla eşleştiğini doğrular.
-     * Birebir eşitlik, alt dize içerme veya model/marka anahtar kelime eşleşmesini kontrol eder.
-     *
-     * @param expectedTitle Detay sayfasından kaydedilen beklenen ürün adı
-     * @return İsimler eşleşiyorsa true
+     * Miktar metnindeki ilk tam sayiyi alir.
      */
-    public boolean isProductNameMatching(String expectedTitle) {
-        if (expectedTitle == null || expectedTitle.isBlank()) {
-            return true;
-        }
-        String cartTitle = getCartProductName();
-        System.out.println(">>> Detay Sayfası Ürün Adı: " + expectedTitle);
-        System.out.println(">>> Sepetteki Ürün Adı: " + cartTitle);
+    private int extractQuantity(String text) {
 
-        String normExpected = expectedTitle.trim().toLowerCase(Locale.forLanguageTag("tr"));
-        String normCart = cartTitle.trim().toLowerCase(Locale.forLanguageTag("tr"));
-
-        // 1. Doğrudan eşitlik veya içerme kontrolü
-        if (!normCart.isEmpty() && (normExpected.contains(normCart) || normCart.contains(normExpected))) {
-            return true;
+        if (text == null) {
+            return -1;
         }
 
-        // 2. Sepet içeriğinde tüm anahtar kelimelerin varlığı
-        return containsProduct(expectedTitle);
+        Matcher matcher =
+                Pattern.compile("\\d+").matcher(text);
+
+        if (matcher.find()) {
+
+            return Integer.parseInt(
+                    matcher.group()
+            );
+        }
+
+        return -1;
     }
 
     /**
-     * Ürün detay sayfasındaki fiyat ile sepetteki fiyatı karşılaştırır.
-     * Sayısal değerleri para birimi ve boşluklardan arındırarak doğrular.
-     * Sepette birden fazla adet olması halinde birim fiyat çarpanını da dikkate alır.
-     *
-     * @param productPrice Detay sayfasındaki fiyat metni
-     * @param cartPrice    Sepet sayfasındaki fiyat metni
-     * @return Fiyatlar eşleşiyorsa true
-     */
-    public boolean isPriceMatching(String productPrice, String cartPrice) {
-        if (productPrice == null || cartPrice == null || productPrice.isBlank() || cartPrice.isBlank()) {
-            return true;
-        }
-        // Sadece rakamları alarak normalize et (ör. "79.999,00 TL" -> "7999900")
-        String cleanProduct = productPrice.replaceAll("[^0-9]", "");
-        String cleanCart = cartPrice.replaceAll("[^0-9]", "");
-        System.out.println(">>> Fiyat Karşılaştırması - Detay: " + cleanProduct + ", Sepet: " + cleanCart);
-
-        // Birebir sayısal eşitlik
-        if (cleanProduct.equals(cleanCart)) {
-            return true;
-        }
-        // Kuruş hanesi uyumluluğu (biri kuruşlu diğeri kuruşsuz olabilir)
-        if (cleanProduct.startsWith(cleanCart) || cleanCart.startsWith(cleanProduct)) {
-            return true;
-        }
-
-        // Sepette birden fazla adet kalmışsa adet çarpanı ile birim fiyat kontrolü
-        try {
-            long pVal = Long.parseLong(cleanProduct);
-            long cVal = Long.parseLong(cleanCart);
-            if (pVal > 0 && cVal % pVal == 0) {
-                long qty = cVal / pVal;
-                System.out.println(">>> Fiyat adet çarpanıyla (" + qty + " adet) tam eşleşti!");
-                return true;
-            }
-        } catch (Exception ignored) {}
-
-        return false;
-    }
-
-    /**
-     * Sepetteki ürün adedini kontrol eder; eğer 1 değilse (örneğin önceki testlerden 2, 8 adet kalmışsa)
-     * açılır liste, input veya azaltma butonu üzerinden ürün adedini 1'e düşürür.
-     *
-     * @return Adet 1 ise veya başarıyla 1 yapıldıysa true
+     * Eski metot adi korunur.
+     * Miktari degistirmez, sadece dogrular.
      */
     public boolean verifyAndSetQuantityToOne() {
-        acceptCookiesIfExists();
-        try {
-            // 1. Yöntem: Standart açılır liste (Select / Dropdown)
-            List<WebElement> selects = driver.findElements(By.cssSelector(
-                    "select[name*='quantity'], select[class*='quantity'], select[data-test-id*='quantity'], select[aria-label*='Adet'], select"
-            ));
-            for (WebElement sel : selects) {
-                try {
-                    if (sel.isDisplayed()) {
-                        Select s = new Select(sel);
-                        String selectedOption = s.getFirstSelectedOption().getText().trim();
-                        System.out.println(">>> Sepetteki ürün adedi (Select): " + selectedOption);
-                        if (!selectedOption.equals("1")) {
-                            s.selectByVisibleText("1");
-                            System.out.println(">>> Ürün adedi 1 olarak güncellendi.");
-                            Thread.sleep(1500);
-                        }
-                        return true;
-                    }
-                } catch (Exception ignored) {}
-            }
 
-            // 2. Yöntem: Metin giriş kutusu (Input)
-            List<WebElement> inputs = driver.findElements(By.cssSelector(
-                    "input[name*='quantity'], input[class*='quantity'], input[data-test-id*='quantity'], input[aria-label*='Adet']"
-            ));
-            for (WebElement inp : inputs) {
-                try {
-                    if (inp.isDisplayed()) {
-                        String val = inp.getAttribute("value");
-                        System.out.println(">>> Sepetteki ürün adedi (Input): " + val);
-                        if (val != null && !val.trim().equals("1")) {
-                            inp.clear();
-                            inp.sendKeys("1");
-                            inp.sendKeys(Keys.ENTER);
-                            System.out.println(">>> Ürün adedi input üzerinden 1 yapıldı.");
-                            Thread.sleep(1500);
-                        }
-                        return true;
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            // 3. Yöntem: Adet azaltma (-) butonu
-            List<WebElement> decreaseButtons = driver.findElements(By.cssSelector(
-                    "button[aria-label*='azalt' i], button[aria-label*='Azalt' i], button[class*='decrease'], [class*='minus']"
-            ));
-            for (WebElement btn : decreaseButtons) {
-                try {
-                    if (btn.isDisplayed()) {
-                        btn.click();
-                        System.out.println(">>> Adet azaltma butonuna tıklandı.");
-                        Thread.sleep(1500);
-                        return true;
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            // 4. Yöntem: Görünür adet metin kontrolü
-            List<WebElement> quantityTexts = driver.findElements(By.cssSelector(
-                    "[class*='quantity'], [class*='counter'], [data-test-id*='quantity']"
-            ));
-            for (WebElement qt : quantityTexts) {
-                try {
-                    if (qt.isDisplayed() && qt.getText().contains("1")) {
-                        System.out.println(">>> Sepette ürün adedinin 1 olduğu doğrulandı: " + qt.getText());
-                        return true;
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            System.out.println(">>> Adet kontrolü tamamlandı (varsayılan: 1 adet).");
-            return true;
-        } catch (Exception e) {
-            System.out.println("Adet kontrolünde hata veya tek ürün var: " + e.getMessage());
-            return true;
-        }
+        return hasExactlyOneProductWithQuantityOne();
     }
 
     /**
-     * Sepet sayfasında eklenen ürünün yer alıp almadığını metin ve element bazında doğrular.
-     * Ürün başlığındaki anahtar kelimeleri (marka, model vb.) 15 saniyeye kadar arar.
-     *
-     * @param expectedName Aranacak ürün başlığı
-     * @return Ürün sepette bulunursa true
+     * Sepette tek urun satiri ve
+     * bu urunden tam 1 adet bulunmali.
      */
-    public boolean containsProduct(String expectedName) {
-        acceptCookiesIfExists();
+    public boolean hasExactlyOneProductWithQuantityOne() {
 
-        if (expectedName == null || expectedName.isBlank()) {
-            return true;
-        }
+        try {
 
-        // Ürün adındaki anlamlı anahtar kelimeleri çıkar (en az 3 karakterli kelimeler)
-        String cleaned = expectedName.replaceAll("[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ\\s]", " ").trim();
-        List<String> keywords = Arrays.stream(cleaned.split("\\s+"))
-                .map(String::trim)
-                .filter(w -> w.length() >= 3)
-                .map(w -> w.toLowerCase(Locale.forLanguageTag("tr")))
-                .toList();
+            return wait.until(webDriver -> {
 
-        String keyword1 = !keywords.isEmpty() ? keywords.get(0) : "";
-        String keyword2 = keywords.size() > 1 ? keywords.get(1) : "";
+                List<WebElement> rows = getCartRows();
 
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < 15000) {
-            try {
-                // Sepetteki ürün kartı elemanlarını kontrol et
-                List<WebElement> elements = driver.findElements(By.cssSelector(
-                        "a[href*='-p-'], a[href*='/p/'], [class*='product_name'], [class*='productName'], " +
-                        "[class*='itemTitle'], [class*='product_title'], [class*='basket_item'], " +
-                        "div[class*='product'] a, div[class*='item'] a, li[class*='item'], div[class*='merchant'] ~ div"
-                ));
-
-                for (WebElement el : elements) {
-                    try {
-                        if (el.isDisplayed()) {
-                            String text = el.getText().toLowerCase(Locale.forLanguageTag("tr"));
-                            if (!keyword1.isEmpty() && text.contains(keyword1)) {
-                                if (keyword2.isEmpty() || text.contains(keyword2)) {
-                                    System.out.println(">>> Ürün sepette element içinde bulundu: " + text);
-                                    return true;
-                                }
-                            }
-                        }
-                    } catch (Exception ignored) {}
+                if (rows.size() != 1) {
+                    return false;
                 }
 
-                // Sayfanın genel görünür gövde (body) metnini kontrol et
-                String bodyText = driver.findElement(By.tagName("body")).getText().toLowerCase(Locale.forLanguageTag("tr"));
-                if (!keyword1.isEmpty() && bodyText.contains(keyword1)) {
-                    if (keyword2.isEmpty() || bodyText.contains(keyword2)) {
-                        System.out.println(">>> Ürün sepette sayfa metni içinde başarıyla doğrulandı: " + keyword1 + " " + keyword2);
-                        return true;
-                    }
-                }
-            } catch (Exception ignored) {}
+                return getQuantity() == 1;
+            });
 
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException ignored) {}
+        } catch (TimeoutException e) {
+
+            return false;
         }
-
-        return false;
     }
 }

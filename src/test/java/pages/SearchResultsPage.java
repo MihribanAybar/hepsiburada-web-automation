@@ -1,178 +1,578 @@
+
 package pages;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.StaleElementReferenceException;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * SearchResultsPage: Arama sonuçları sayfasındaki (Search Results) ürün listesini ve
- * ızgara (grid) görünümündeki ürünleri temsil eden POM sınıfıdır.
- * Ürünlerin listelenmesi, satır/sütun hesabı ve ürüne tıklama/sekme yönetimi işlevlerini içerir.
+ * SearchResultsPage:
+ * Hepsiburada arama sonuçları sayfasını temsil eder.
+ *
+ * Ana ürün listesinin CSS Grid kolon sayısını
+ * dinamik okuyarak ikinci satırın ilk ürününü seçer.
+ *
+ * Sabit kolon sayısı kullanılmaz.
+ * Thread.sleep kullanılmaz.
  */
 public class SearchResultsPage {
 
     private final WebDriver driver;
     private final WebDriverWait wait;
 
-    // Arama sonuçlarında dönen ürün kartlarının seçicisi
-    private final By productCards = By.cssSelector(
-            "li.productListContent-item, [data-test-id='product-card-container'], article[id*='product-'], div[class*='productCard']"
-    );
+    private static final int WAIT_SECONDS = 20;
+
+    /**
+     * Kullanıcının Chrome DevTools üzerinden
+     * doğruladığı gerçek grid locator'ı.
+     */
+    private final By productListContainer =
+            By.cssSelector(
+                    "ul[class*='productListContent']"
+            );
+
+    /**
+     * Grid'in doğrudan altındaki ürün kartları.
+     *
+     * Reklam carousel'leri ve sayfadaki diğer
+     * ürün kartları bu kapsamın dışında kalır.
+     */
+    private final By directProductItems =
+            By.xpath("./li");
+
+    /**
+     * Ürün detay sayfasına giden bağlantılar.
+     */
+    private final By productLinks =
+            By.cssSelector("a[href]");
 
     public SearchResultsPage(WebDriver driver) {
+
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+        this.wait = new WebDriverWait(
+                driver,
+                Duration.ofSeconds(WAIT_SECONDS)
+        );
+
+        this.wait.pollingEvery(
+                Duration.ofMillis(500)
+        );
     }
 
     /**
-     * Arama sonuçları sayfasında ürün kartlarının DOM'a yüklenmesini bekler.
-     */
-    public void waitForProducts() {
-        wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(productCards));
-    }
-
-    /**
-     * Arama sonuçlarının kullanıcının aradığı anahtar kelimeye uygun olup olmadığını doğrular.
-     * URL'de aranan kelimenin geçtiğini ve sayfada ürün kartlarının listelendiğini kontrol eder.
+     * Görünür ana ürün grid'ini bulur.
      *
-     * @param keyword Doğrulanacak arama kelimesi (ör. 'bilgisayar')
-     * @return Sonuçlar uygun ve ürünler görünür ise true
+     * Bekleme içermez.
+     * WebDriverWait koşullarında kullanılır.
      */
-    public boolean isSearchResultsDisplayed(String keyword) {
+    private WebElement findProductGridNow() {
+
+        List<WebElement> grids =
+                driver.findElements(productListContainer);
+
+        for (WebElement grid : grids) {
+
+            try {
+
+                if (grid.isDisplayed()) {
+                    return grid;
+                }
+
+            } catch (StaleElementReferenceException ignored) {
+                // Sayfa güncellenmiş olabilir.
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Grid'in anlık kolon sayısını CSS üzerinden okur.
+     *
+     * Chrome DevTools'ta doğrulanan yöntem:
+     *
+     * window.getComputedStyle(container)
+     *       .gridTemplateColumns
+     *
+     * CSS Grid değilse yanlış indeksle seçim yapmaz.
+     */
+    private int getColumnCount(WebElement grid) {
+
+        JavascriptExecutor js =
+                (JavascriptExecutor) driver;
+
+        String display = (String) js.executeScript(
+                "return window.getComputedStyle(arguments[0]).display;",
+                grid
+        );
+
+        if (!"grid".equals(display)
+                && !"inline-grid".equals(display)) {
+
+            throw new IllegalStateException(
+                    "Ürün listesi CSS Grid değil. " +
+                            "Bulunan display değeri: " + display
+            );
+        }
+
+        String gridTemplateColumns =
+                (String) js.executeScript(
+                        "return window.getComputedStyle(" +
+                                "arguments[0]).gridTemplateColumns;",
+                        grid
+                );
+
+        if (gridTemplateColumns == null
+                || gridTemplateColumns.isBlank()
+                || gridTemplateColumns.equals("none")) {
+
+            throw new IllegalStateException(
+                    "CSS Grid kolon bilgisi okunamadı."
+            );
+        }
+
+        int columnCount =
+                gridTemplateColumns
+                        .trim()
+                        .split("\\s+")
+                        .length;
+
+        if (columnCount < 1) {
+
+            throw new IllegalStateException(
+                    "Geçerli kolon sayısı bulunamadı."
+            );
+        }
+
+        return columnCount;
+    }
+
+    /**
+     * Sadece ana grid'in doğrudan li çocuklarını alır.
+     *
+     * Bütün sayfadaki productCard div'lerini
+     * taramaz.
+     */
+    private List<WebElement> getGridProducts(
+            WebElement grid) {
+
+        return grid.findElements(directProductItems);
+    }
+
+    /**
+     * Ürün kartının içindeki gerçek detay
+     * bağlantısını bulur.
+     *
+     * Sepete ekle gibi başka aksiyonlara tıklamaz.
+     *
+     * Uygun bağlantı henüz yoksa null döner.
+     */
+    private WebElement findProductDetailLink(
+            WebElement productCard) {
+
+        List<WebElement> links =
+                productCard.findElements(productLinks);
+
+        for (WebElement link : links) {
+
+            try {
+
+                String href =
+                        link.getAttribute("href");
+
+                if (href == null || href.isBlank()) {
+                    continue;
+                }
+
+                boolean isProductUrl =
+                        href.contains("-p-")
+                                || href.contains("/p/");
+
+                if (isProductUrl
+                        && link.isDisplayed()
+                        && link.isEnabled()) {
+
+                    return link;
+                }
+
+            } catch (StaleElementReferenceException ignored) {
+                // Ürün kartı yeniden oluşturulmuş olabilir.
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Grid'in en az iki ürün satırı içerdiğini
+     * kontrol eder.
+     *
+     * Bu metot WebDriverWait içinde çağrılır.
+     * İçerisinde ikinci bir wait yoktur.
+     */
+    private boolean areTwoRowsReadyNow() {
+
         try {
-            waitForProducts();
-            String currentUrl = driver.getCurrentUrl().toLowerCase();
-            boolean urlMatches = currentUrl.contains("q=" + keyword.toLowerCase()) || currentUrl.contains(keyword.toLowerCase());
-            boolean hasProducts = !driver.findElements(productCards).isEmpty();
-            return urlMatches && hasProducts;
-        } catch (Exception e) {
+
+            WebElement grid = findProductGridNow();
+
+            if (grid == null) {
+                return false;
+            }
+
+            int columnCount = getColumnCount(grid);
+
+            List<WebElement> products =
+                    getGridProducts(grid);
+
+            // 4 kolon varsa en az 5 ürün,
+            // 3 kolon varsa en az 4 ürün gerekir.
+            if (products.size() <= columnCount) {
+                return false;
+            }
+
+            // İlk ürün kartının gerçek bir ürün
+            // bağlantısı içerdiğini kontrol et.
+            if (findProductDetailLink(
+                    products.get(0)
+            ) == null) {
+                return false;
+            }
+
+            // İkinci satırın ilk ürünü de
+            // detay bağlantısına sahip olmalı.
+            WebElement target =
+                    products.get(columnCount);
+
+            return target.isDisplayed()
+                    && findProductDetailLink(target) != null;
+
+        } catch (StaleElementReferenceException e) {
+
             return false;
         }
     }
 
     /**
-     * Izgara (grid) görünümündeki ürün listesinde 2. satırın 1. ürününü hesaplayarak döner.
-     * Standart 4 sütunlu Hepsiburada ızgara yapısında 2. satır 1. ürün indeks 4'tür (5. ürün).
-     *
-     * @param columnsPerRow Satır başına düşen sütun sayısı (Hepsiburada için varsayılan: 4)
-     * @return Hedef ürün kartı WebElement'i
+     * Ana grid'in ve ikinci satırın
+     * yüklenmesini en fazla 20 saniye bekler.
      */
-    public WebElement getFirstProductOfSecondRow(int columnsPerRow) {
+    public void waitForProducts() {
+
+        try {
+
+            wait.withMessage(
+                    "20 saniyede CSS Grid üzerinde " +
+                            "ikinci satırın ilk ürünü bulunamadı."
+            ).until(webDriver ->
+                    areTwoRowsReadyNow()
+            );
+
+        } catch (TimeoutException e) {
+
+            throw new TimeoutException(
+                    "Arama sonuçları beklenen sürede " +
+                            "yüklenmedi. Ana ürün grid'ini " +
+                            "ve doğrudan li çocuklarını kontrol edin.",
+                    e
+            );
+        }
+    }
+
+    /**
+     * Arama sonuçlarının açıldığını doğrular.
+     */
+    public boolean isSearchResultsDisplayed(
+            String keyword) {
+
+        if (keyword == null || keyword.isBlank()) {
+            return false;
+        }
+
+        String currentUrl =
+                driver.getCurrentUrl().toLowerCase();
+
+        if (!currentUrl.contains(
+                keyword.toLowerCase())) {
+
+            return false;
+        }
+
+        try {
+
+            waitForProducts();
+
+            System.out.println(
+                    "Arama sonuçları grid'i yüklendi."
+            );
+
+            return true;
+
+        } catch (TimeoutException e) {
+
+            System.out.println(
+                    "Arama sonuçları yüklenemedi: " +
+                            e.getMessage()
+            );
+
+            return false;
+        }
+    }
+
+    /**
+     * İkinci satırın ilk ürününü
+     * CSS Grid kolon sayısıyla bulur.
+     *
+     * 3 kolon -> index 3
+     * 4 kolon -> index 4
+     * 5 kolon -> index 5
+     */
+    public WebElement getFirstProductOfSecondRow() {
+
         waitForProducts();
 
-        List<WebElement> cards = driver.findElements(productCards);
+        try {
+
+            return wait.withMessage(
+                    "İkinci satırın ilk ürünü " +
+                            "20 saniyede belirlenemedi."
+            ).until(webDriver -> {
+
+                try {
+
+                    WebElement grid =
+                            findProductGridNow();
+
+                    if (grid == null) {
+                        return null;
+                    }
+
+                    int columnCount =
+                            getColumnCount(grid);
+
+                    List<WebElement> products =
+                            getGridProducts(grid);
+
+                    /*
+                     * 2. satırın 1. ürünü:
+                     *
+                     * targetIndex =
+                     * (2 - 1) * columnCount + (1 - 1)
+                     *
+                     * targetIndex = columnCount
+                     */
+                    int targetIndex = columnCount;
+
+                    if (products.size() <= targetIndex) {
+                        return null;
+                    }
+
+                    WebElement target =
+                            products.get(targetIndex);
+
+                    if (!target.isDisplayed()) {
+                        return null;
+                    }
+
+                    if (findProductDetailLink(target)
+                            == null) {
+                        return null;
+                    }
+
+                    System.out.println(
+                            "CSS Grid kolon sayısı: " +
+                                    columnCount
+                    );
+
+                    System.out.println(
+                            "Seçilecek ürün indeksi: " +
+                                    targetIndex
+                    );
+
+                    System.out.println(
+                            "İkinci satırdaki ilk ürün bulundu."
+                    );
+
+                    return target;
+
+                } catch (StaleElementReferenceException e) {
+
+                    return null;
+                }
+            });
+
+        } catch (TimeoutException e) {
+
+            throw new TimeoutException(
+                    "İkinci satırın ilk ürünü " +
+                            "CSS Grid yöntemiyle bulunamadı.",
+                    e
+            );
+        }
+    }
+
+    /**
+     * Eski SearchSteps kullanımıyla
+     * geriye dönük uyumluluk sağlar.
+     *
+     * Gönderilen kolon sayısı kullanılmaz.
+     * Gerçek sayı CSS üzerinden okunur.
+     */
+    public WebElement getFirstProductOfSecondRow(
+            int columnsPerRow) {
 
         if (columnsPerRow < 1) {
-            throw new IllegalArgumentException("Sütun sayısı en az 1 olmalı.");
+
+            throw new IllegalArgumentException(
+                    "Kolon sayısı pozitif olmalıdır."
+            );
         }
 
-        // 4 sütunlu düzende: Satır 1 = 0,1,2,3; Satır 2 = 4,5,6,7 -> İkinci satırın ilk ürünü indeks 4'tür
-        int index = columnsPerRow;
-
-        if (cards.size() <= index) {
-            System.out.println("Yeterli ürün bulunamadı, ilk ürün seçiliyor. Toplam bulunan: " + cards.size());
-            index = 0;
-        }
-
-        WebElement target = cards.get(index);
-        // Hedef kartı ekranın ortasına kaydır
-        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", target);
-        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
-
-        return target;
+        return getFirstProductOfSecondRow();
     }
 
     /**
-     * Verilen ürün kartı üzerindeki başlık metnini döner.
-     *
-     * @param card Ürün kartı WebElement'i
-     * @return Ürün adı metni
+     * Ürün kartının başlık bilgisini döndürür.
      */
     public String getProductName(WebElement card) {
-        try {
-            return card.getText();
-        } catch (Exception e) {
-            return "";
+
+        if (card == null) {
+
+            throw new IllegalArgumentException(
+                    "Ürün kartı null olamaz."
+            );
         }
+
+        WebElement link =
+                findProductDetailLink(card);
+
+        if (link == null) {
+
+            throw new IllegalStateException(
+                    "Ürün detay bağlantısı bulunamadı."
+            );
+        }
+
+        String title = link.getAttribute("title");
+
+        if (title != null && !title.isBlank()) {
+            return title.trim();
+        }
+
+        return link.getText().trim();
     }
 
     /**
-     * Seçilen ürün kartına tıklar ve ürün detay sayfasına geçiş yapar.
-     * Hepsiburada'da ürünler genellikle yeni sekmede açıldığından, sekme geçişini
-     * (window handles switch) dinamik olarak takip eder ve sürücüyü yeni sekmeye odaklar.
+     * Seçilen ürünün gerçek bağlantısına tıklar.
      *
-     * @param card Tıklanacak ürün kartı WebElement'i
+     * Yeni sekme açılırsa geçer.
+     * Aynı sekmede açılırsa mevcut sekmede devam eder.
      */
     public void clickProduct(WebElement card) {
-        String originalWindow = driver.getWindowHandle();
-        String originalUrl = driver.getCurrentUrl();
 
-        // Kartın içerisindeki asıl tıklanabilir bağlantı (a) etiketini ve href adresini bul
-        WebElement clickTarget = card;
-        String productHref = null;
-        try {
-            List<WebElement> links = card.findElements(By.cssSelector("a[href*='-p-'], a[href*='/p/'], a"));
-            if (!links.isEmpty()) {
-                clickTarget = links.get(0);
-                productHref = clickTarget.getAttribute("href");
-            }
-        } catch (Exception ignored) {}
+        if (card == null) {
 
-        // Elemanı görünür alana kaydır
-        try {
-            ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", clickTarget);
-            Thread.sleep(150);
-        } catch (Exception ignored) {}
-
-        // Tıklamayı gerçekleştir
-        try {
-            clickTarget.click();
-        } catch (Exception e) {
-            try {
-                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", clickTarget);
-            } catch (Exception ex) {
-                ((JavascriptExecutor) driver).executeScript("arguments[0].click();", card);
-            }
+            throw new IllegalArgumentException(
+                    "Tıklanacak ürün kartı null olamaz."
+            );
         }
 
-        // Yeni sekme veya sayfa geçişini takip et (150ms aralıklarla)
-        boolean navigated = false;
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < 10000) {
-            // 1. Durum: Yeni sekme açıldıysa sürücüyü yeni sekmeye geçir
-            if (driver.getWindowHandles().size() > 1) {
-                for (String windowHandle : driver.getWindowHandles()) {
-                    if (!originalWindow.equals(windowHandle)) {
-                        driver.switchTo().window(windowHandle);
-                        System.out.println(">>> Yeni ürün sekmesine geçildi: " + driver.getTitle());
-                        navigated = true;
-                        break;
-                    }
-                }
-                if (navigated) break;
-            }
+        WebElement productLink =
+                findProductDetailLink(card);
 
-            // 2. Durum: Yeni sekme açılmadıysa aynı sekmede ürün detay sayfasına yönlenildiyse
-            String currentUrl = driver.getCurrentUrl();
-            if (!currentUrl.equals(originalUrl) && (currentUrl.contains("-p-") || currentUrl.contains("/p/"))) {
-                System.out.println(">>> Ürün aynı sekmede açıldı: " + currentUrl);
-                navigated = true;
-                break;
-            }
+        if (productLink == null) {
 
-            try { Thread.sleep(150); } catch (InterruptedException ignored) {}
+            throw new IllegalStateException(
+                    "Ürün detay sayfasına giden " +
+                            "bağlantı bulunamadı."
+            );
         }
 
-        // Eğer tıklama algılanmadıysa doğrudan ürün bağlantısına yönlendir (fallback)
-        if (!navigated && productHref != null && !productHref.isBlank()) {
-            System.out.println(">>> Tıklama algılanmadı, ürün bağlantısına doğrudan yönlendiriliyor: " + productHref);
-            driver.get(productHref);
+        String originalUrl =
+                driver.getCurrentUrl();
+
+        String originalWindow =
+                driver.getWindowHandle();
+
+        Set<String> originalWindows =
+                new HashSet<>(
+                        driver.getWindowHandles()
+                );
+
+        // Gerçek ürün bağlantısını görünür alana kaydır.
+        ((JavascriptExecutor) driver).executeScript(
+                "arguments[0].scrollIntoView(" +
+                        "{block:'center', inline:'nearest'});",
+                productLink
+        );
+
+        WebElement clickableLink = wait.until(
+                ExpectedConditions.elementToBeClickable(
+                        productLink
+                )
+        );
+
+        // JavaScript click değil, normal Selenium click.
+        clickableLink.click();
+
+        // Yeni sekme veya URL değişimini bekle.
+        wait.withMessage(
+                "Ürün bağlantısına tıklandı fakat " +
+                        "20 saniyede ürün sayfasına geçilemedi."
+        ).until(webDriver -> {
+
+            Set<String> currentWindows =
+                    webDriver.getWindowHandles();
+
+            if (!currentWindows.equals(originalWindows)) {
+                return true;
+            }
+
+            return !webDriver.getCurrentUrl()
+                    .equals(originalUrl);
+        });
+
+        Set<String> currentWindows =
+                driver.getWindowHandles();
+
+        Set<String> newWindows =
+                new HashSet<>(currentWindows);
+
+        newWindows.removeAll(originalWindows);
+
+        if (!newWindows.isEmpty()) {
+
+            driver.switchTo().window(
+                    newWindows.iterator().next()
+            );
+
+            System.out.println(
+                    "Yeni ürün sekmesine geçildi."
+            );
+
+        } else {
+
+            driver.switchTo().window(originalWindow);
+
+            System.out.println(
+                    "Ürün aynı sekmede açıldı."
+            );
         }
+
+        System.out.println(
+                "Aktif ürün adresi: " +
+                        driver.getCurrentUrl()
+        );
     }
 }

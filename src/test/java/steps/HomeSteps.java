@@ -1,47 +1,78 @@
 package steps;
 
 import com.thoughtworks.gauge.Step;
-import org.junit.Assert;
 import pages.HomePage;
 import support.DriverFactory;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
- * HomeSteps: Hepsiburada ana sayfası ile ilgili Gauge adım uygulamalarını (Step Implementation) içerir.
- * Tarayıcının açılması, ana sayfaya gidilmesi ve giriş sayfasına yönelme adımlarını yönetir.
+ * HomeSteps: Hepsiburada ana sayfasına ait
+ * Gauge adım uygulamalarını içerir.
+ *
+ * Ana sayfaya yönlenme ve giriş sayfasını
+ * açma işlemlerini yönetir.
  */
 public class HomeSteps {
 
-    // Sayfa nesnesini lazy-init (ihtiyaç anında oluşturma) yöntemiyle tutan referans
     private HomePage homePage;
 
     /**
-     * HomePage sayfa nesnesini döner; henüz oluşturulmamışsa aktif WebDriver ile başlatır.
-     *
-     * @return HomePage nesnesi
+     * HomePage nesnesini ihtiyaç duyulduğunda oluşturur.
      */
     private HomePage getHomePage() {
+
         if (homePage == null) {
-            homePage = new HomePage(DriverFactory.getDriver());
+            homePage = new HomePage(
+                    DriverFactory.getDriver()
+            );
         }
+
         return homePage;
     }
 
     /**
-     * 1. Adım: Tarayıcıyı açar ve belirtilen URL adresine (https://www.hepsiburada.com) yönlendirir.
-     *
-     * @param url Gidilecek web sitesi adresi
+     * Tarayıcının başlatıldığını kontrol eder
+     * ve Hepsiburada ana sayfasını açar.
      */
     @Step("Tarayıcıyı aç ve <url> adresine git")
     public void openBrowserAndNavigate(String url) {
-        Assert.assertNotNull("Tarayıcı başlatılamadı.", DriverFactory.getDriver());
+
+        assertThat(url)
+                .as("Site adresi boş olmamalıdır.")
+                .isNotBlank();
+
+        String expectedUrl = "https://www.hepsiburada.com";
+
+        String normalizedUrl = url.trim()
+                .replaceAll("/+$", "");
+
+        assertThat(normalizedUrl)
+                .as("Senaryoda doğru Hepsiburada adresi kullanılmalıdır.")
+                .isEqualTo(expectedUrl);
+
+        assertThat(DriverFactory.getDriver())
+                .as("WebDriver başlatılmış olmalıdır.")
+                .isNotNull();
+
         getHomePage().open();
+
+        System.out.println(
+                "Hepsiburada ana sayfası açıldı."
+        );
     }
 
     /**
-     * 2. Adım: Ana sayfanın sağ üst köşesinde yer alan 'Giriş Yap' butonuna tıklar.
+     * Ana sayfadaki Giriş Yap menüsünü açar
+     * ve giriş sayfasına yönlenir.
      */
     @Step("Sağ üstteki Giriş Yap butonuna tıkla")
     public void clickLoginButton() {
+
         getHomePage().openLogin();
+
+        System.out.println(
+                "Giriş sayfasına yönlendirildi."
+        );
     }
 }

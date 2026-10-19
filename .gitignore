@@ -21,3 +21,6 @@ out/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Gercek giris bilgileri - GitHub'a gonderilmez
+/env/default/credentials.properties

@@ -2,86 +2,143 @@ package steps;
 
 import com.thoughtworks.gauge.Step;
 import com.thoughtworks.gauge.datastore.ScenarioDataStore;
-import org.junit.Assert;
 import pages.ProductPage;
 import support.DriverFactory;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
- * ProductSteps: Ürün detay sayfası ile ilgili Gauge adım uygulamalarını içerir.
- * Sayfaya yönlenme, ürün bilgileri kaydı (ad, fiyat), buton aktifliği ve sepete ekleme onayını yönetir.
+ * ProductSteps: Ürün detay sayfasına ait Gauge adımlarını yönetir.
+ *
+ * Ürün sayfasını doğrular, ürün bilgilerini kaydeder,
+ * Sepete Ekle butonunu kontrol eder ve ürünü sepete ekler.
  */
 public class ProductSteps {
 
     private ProductPage productPage;
 
+    /**
+     * ProductPage nesnesini oluşturur ve tekrar kullanır.
+     */
     private ProductPage getProductPage() {
+
         if (productPage == null) {
-            productPage = new ProductPage(DriverFactory.getDriver());
+            productPage = new ProductPage(
+                    DriverFactory.getDriver()
+            );
         }
+
         return productPage;
     }
 
     /**
-     * Beklenen Sonuç (Assertion 3): İkinci satırdaki ilk ürünün detay sayfasına başarıyla yönlenildiğini doğrular.
+     * Seçilen ürünün detay sayfasına yönlenildiğini doğrular.
      */
     @Step("İkinci satırdaki ilk ürünün sayfasına yönlendiğini doğrula")
     public void verifyNavigatedToProductPage() {
-        Assert.assertTrue(
-                "İkinci satırdaki ilk ürünün sayfasına yönlenilmelidir.",
+
+        assertThat(
                 getProductPage().isOnProductPage()
+        )
+                .as("Seçilen ürünün detay sayfası açılmalıdır.")
+                .isTrue();
+
+        System.out.println(
+                "Ürün detay sayfası doğrulandı."
         );
     }
 
     /**
-     * 8.a Adımı: Ürün detay sayfasındaki ürün adını okur ve sonraki adımlarda doğrulamak üzere
-     * Gauge'ın senaryo veri havuzuna (ScenarioDataStore) kaydeder.
+     * Ürün adını kaydeder.
+     * Daha sonra sepet doğrulamasında kullanılacaktır.
      */
     @Step("Ürün adını kaydet")
     public void saveProductName() {
+
         String title = getProductPage().getProductTitle();
-        Assert.assertFalse("Ürün adı boş olmamalıdır.", title == null || title.isBlank());
-        ScenarioDataStore.put("selectedProductName", title);
-        System.out.println(">>> Kaydedilen Ürün Adı: " + title);
-    }
 
-    /**
-     * 8.b Adımı: Ürün detay sayfasındaki güncel satış fiyatını okur ve senaryo veri havuzuna kaydeder.
-     */
-    @Step("Ürün fiyatını kaydet")
-    public void saveProductPrice() {
-        String price = getProductPage().getProductPrice();
-        ScenarioDataStore.put("selectedProductPrice", price);
-        System.out.println(">>> Kaydedilen Ürün Fiyatı: " + price);
-    }
+        assertThat(title)
+                .as("Ürün detay sayfasındaki ürün adı boş olmamalıdır.")
+                .isNotBlank();
 
-    /**
-     * 8.c Adımı: 'Sepete Ekle' butonunun sayfada görünür ve tıklanabilir (aktif) olduğunu doğrular.
-     */
-    @Step("Sepete Ekle butonunun aktif olduğunu doğrula")
-    public void verifyAddToCartButtonEnabled() {
-        Assert.assertTrue(
-                "Sepete Ekle butonu aktif ve tıklanabilir olmalıdır.",
-                getProductPage().isAddToCartButtonEnabled()
+        ScenarioDataStore.put(
+                "selectedProductName",
+                title
+        );
+
+        System.out.println(
+                "Kaydedilen ürün adı: " + title
         );
     }
 
     /**
-     * 8. Adım: 'Sepete Ekle' butonuna tıklar.
+     * Ürün fiyatını kaydeder.
+     * Fiyat, sepet ekranındaki fiyatla karşılaştırılacaktır.
      */
-    @Step("Sepete Ekle butonuna tıkla")
-    public void clickAddToCart() {
-        getProductPage().addToCart();
+    @Step("Ürün fiyatını kaydet")
+    public void saveProductPrice() {
+
+        String price = getProductPage().getProductPrice();
+
+        assertThat(price)
+                .as("Ürün detay sayfasındaki fiyat okunabilmelidir.")
+                .isNotBlank();
+
+        ScenarioDataStore.put(
+                "selectedProductPrice",
+                price
+        );
+
+        System.out.println(
+                "Ürün fiyatı kaydedildi: " + price
+        );
     }
 
     /**
-     * 8.b Adımı & Beklenen Sonuç (Assertion 4): Ürünün sepete eklendiğine dair
-     * bildirim/onay mesajının görüntülendiğini doğrular.
+     * Sepete Ekle butonunun aktif olduğunu doğrular.
+     */
+    @Step("Sepete Ekle butonunun aktif olduğunu doğrula")
+    public void verifyAddToCartButtonEnabled() {
+
+        assertThat(
+                getProductPage().isAddToCartButtonEnabled()
+        )
+                .as("Sepete Ekle butonu aktif ve tıklanabilir olmalıdır.")
+                .isTrue();
+
+        System.out.println(
+                "Sepete Ekle butonu aktif."
+        );
+    }
+
+    /**
+     * Ürünü sepete ekler.
+     */
+    @Step("Sepete Ekle butonuna tıkla")
+    public void clickAddToCart() {
+
+        getProductPage().addToCart();
+
+        System.out.println(
+                "Ürün sepete ekleme işlemi başlatıldı."
+        );
+    }
+
+    /**
+     * Sepete ekleme onay mesajını doğrular.
      */
     @Step("Sepete eklendiğine dair onay mesajını gör")
     public void verifyAddToCartConfirmation() {
-        Assert.assertTrue(
-                "Ürünün sepete eklendiğine dair onay mesajı görülmelidir.",
-                getProductPage().isAddedToCartConfirmationDisplayed()
+
+        assertThat(
+                getProductPage()
+                        .isAddedToCartConfirmationDisplayed()
+        )
+                .as("Ürünün sepete eklendiğine dair onay mesajı görünmelidir.")
+                .isTrue();
+
+        System.out.println(
+                "Sepete ekleme onayı doğrulandı."
         );
     }
 }
