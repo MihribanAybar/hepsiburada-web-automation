@@ -2,6 +2,7 @@
 package pages;
 
 import org.openqa.selenium.By;
+import support.LocatorReader;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
@@ -31,16 +32,10 @@ public class ProductPage {
     private final WebDriverWait wait;
 
     // Ürün başlığı
-    private final By productTitle = By.cssSelector(
-            "h1, [data-test-id='title']"
-    );
+    private final By productTitle = LocatorReader.getLocator("Shopping/product_detail.json", "productTitle");
 
     // Sepete Ekle butonu
-    private final By addToCartButton = By.cssSelector(
-            "#addToCart, " +
-                    "button[data-test-id='addToCart'], " +
-                    "[id*='addToCart']"
-    );
+    private final By addToCartButton = LocatorReader.getLocator("Shopping/product_detail.json", "addToCartButton");
 
     /*
      * Ana ürünün satış fiyatı için doğrulanan locator'lar.
@@ -61,28 +56,10 @@ public class ProductPage {
      * data-test-id="price-current-price"
      * kullanılmaz.
      */
-    private final By[] productPriceLocators = {
-
-            By.cssSelector(
-                    "[data-test-id='default-price'] " +
-                            "> div:first-child > span"
-            ),
-
-            By.cssSelector(
-                    "div.bWwoI8vknB6COlRVbpRj"
-            )
-    };
+    private final By[] productPriceLocators = LocatorReader.getLocators("Shopping/product_detail.json", "productPriceLocators");
 
     // Sepete ekleme sonrası gösterilen bildirimler
-    private final By addToCartConfirmation = By.cssSelector(
-            "[data-test-class='modal_overflow'], " +
-                    "div[class*='checkoutui-Modal'], " +
-                    "div[class*='notification'], " +
-                    "div[class*='toast'], " +
-                    "[class*='hb-toast'], " +
-                    "div[role='dialog'], " +
-                    "div[class*='modal']"
-    );
+    private final By addToCartConfirmation = LocatorReader.getLocator("Shopping/product_detail.json", "addToCartConfirmation");
 
     private static final Pattern PRICE_PATTERN =
             Pattern.compile(

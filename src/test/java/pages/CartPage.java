@@ -2,6 +2,7 @@
 package pages;
 
 import org.openqa.selenium.By;
+import support.LocatorReader;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
@@ -40,55 +41,24 @@ public class CartPage {
     private final WebDriverWait wait;
 
     private final By headerCartCount =
-            By.id("cartItemCount");
+            LocatorReader.getLocator("Shopping/cart.json", "headerCartCount");
 
-    private final By cartLink = By.cssSelector(
-            "a[href*='checkout.hepsiburada.com/sepetim'], " +
-                    "a[href*='/sepetim']"
-    );
+    private final By cartLink = LocatorReader.getLocator("Shopping/cart.json", "cartLink");
 
     private final By cookieAcceptBtn =
-            By.id("onetrust-accept-btn-handler");
+            LocatorReader.getLocator("Shopping/cart.json", "cookieAcceptBtn");
 
-    private final By addToCartModal = By.cssSelector(
-            "[data-test-class='modal_overflow']"
-    );
+    private final By addToCartModal = LocatorReader.getLocator("Shopping/cart.json", "addToCartModal");
 
-    private final By modalGoToCartButton = By.xpath(
-            "//*[normalize-space(.)='Sepete git' " +
-                    "and not(.//*[normalize-space(.)='Sepete git'])]"
-    );
+    private final By modalGoToCartButton = LocatorReader.getLocator("Shopping/cart.json", "modalGoToCartButton");
 
-    private final By deleteAllProductsButton = By.xpath(
-            "//div[starts-with(@class,'basket_delete_') " +
-                    "and normalize-space(.)='Ürünleri sil']"
-    );
+    private final By deleteAllProductsButton = LocatorReader.getLocator("Shopping/cart.json", "deleteAllProductsButton");
 
-    private final By confirmDeleteAllButton = By.xpath(
-            "//*[normalize-space(.)='Tümünü sil' " +
-                    "and not(.//*[normalize-space(.)='Tümünü sil'])]"
-    );
+    private final By confirmDeleteAllButton = LocatorReader.getLocator("Shopping/cart.json", "confirmDeleteAllButton");
 
-    private final By[] cartRowLocators = {
-            By.cssSelector("[data-test-id='cart-item']"),
-            By.cssSelector("[data-test-id='basket-item']"),
-            By.cssSelector(
-                    "[data-test-id='basket-item-container']"
-            ),
-            By.cssSelector("li[class*='basket_item']"),
-            By.cssSelector("div[class*='basket_item']"),
-            By.cssSelector("div[class*='BasketItem']"),
-            By.cssSelector("div[class*='CartItem']")
-    };
+    private final By[] cartRowLocators = LocatorReader.getLocators("Shopping/cart.json", "cartRowLocators");
 
-    private final By productName = By.cssSelector(
-            "[data-test-id*='product-name'], " +
-                    "[class*='product_name'], " +
-                    "[class*='productName'], " +
-                    "[class*='product_title'], " +
-                    "[class*='itemTitle'], " +
-                    "a[href*='-p-'], a[href*='/p/']"
-    );
+    private final By productName = LocatorReader.getLocator("Shopping/cart.json", "productName");
 
     /*
      * GERCEK URUN SATIRI FIYATI
@@ -102,28 +72,13 @@ public class CartPage {
      * Kazancini gor, eski fiyat ve
      * indirim kapsayicilari secilmez.
      */
-    private final By productPrice = By.cssSelector(
-            "div[class^='product_price_'], " +
-                    "div[class*=' product_price_']"
-    );
+    private final By productPrice = LocatorReader.getLocator("Shopping/cart.json", "productPrice");
 
-    private final By quantitySelect = By.cssSelector(
-            "select[name*='quantity'], " +
-                    "select[class*='quantity'], " +
-                    "select[data-test-id*='quantity']"
-    );
+    private final By quantitySelect = LocatorReader.getLocator("Shopping/cart.json", "quantitySelect");
 
-    private final By quantityInput = By.cssSelector(
-            "input[name*='quantity'], " +
-                    "input[class*='quantity'], " +
-                    "input[data-test-id*='quantity']"
-    );
+    private final By quantityInput = LocatorReader.getLocator("Shopping/cart.json", "quantityInput");
 
-    private final By quantityText = By.cssSelector(
-            "[data-test-id*='quantity'], " +
-                    "[class*='quantityValue'], " +
-                    "[class*='quantity-value']"
-    );
+    private final By quantityText = LocatorReader.getLocator("Shopping/cart.json", "quantityText");
 
     /*
      * Yalnizca tek bir fiyat tutarini kabul eder.
@@ -217,11 +172,7 @@ public class CartPage {
 
                 List<WebElement> parents =
                         element.findElements(
-                                By.xpath(
-                                        "./ancestor-or-self::*[" +
-                                                "self::button or self::a " +
-                                                "or @role='button'][1]"
-                                )
+                                LocatorReader.getLocator("Shopping/cart.json", "modalClickableAncestor")
                         );
 
                 if (!parents.isEmpty()) {

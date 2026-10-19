@@ -1,0 +1,14 @@
+{
+  "productListContainer": {
+    "type": "css",
+    "value": "ul[class*='productListContent']"
+  },
+  "directProductItems": {
+    "type": "xpath",
+    "value": "./li"
+  },
+  "productLinks": {
+    "type": "css",
+    "value": "a[href]"
+  }
+}

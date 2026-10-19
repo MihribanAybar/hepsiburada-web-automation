@@ -2,6 +2,7 @@
 package pages;
 
 import org.openqa.selenium.By;
+import support.LocatorReader;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
@@ -37,9 +38,7 @@ public class SearchResultsPage {
      * doğruladığı gerçek grid locator'ı.
      */
     private final By productListContainer =
-            By.cssSelector(
-                    "ul[class*='productListContent']"
-            );
+            LocatorReader.getLocator("Shopping/search.json", "productListContainer");
 
     /**
      * Grid'in doğrudan altındaki ürün kartları.
@@ -48,13 +47,13 @@ public class SearchResultsPage {
      * ürün kartları bu kapsamın dışında kalır.
      */
     private final By directProductItems =
-            By.xpath("./li");
+            LocatorReader.getLocator("Shopping/search.json", "directProductItems");
 
     /**
      * Ürün detay sayfasına giden bağlantılar.
      */
     private final By productLinks =
-            By.cssSelector("a[href]");
+            LocatorReader.getLocator("Shopping/search.json", "productLinks");
 
     public SearchResultsPage(WebDriver driver) {
 

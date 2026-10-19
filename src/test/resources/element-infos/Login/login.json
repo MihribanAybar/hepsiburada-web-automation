@@ -1,0 +1,14 @@
+{
+  "emailInput": {
+    "type": "id",
+    "value": "txtUserName"
+  },
+  "passwordInput": {
+    "type": "id",
+    "value": "txtPassword"
+  },
+  "submitButton": {
+    "type": "css",
+    "value": "#btnLogin, button[type='submit']"
+  }
+}

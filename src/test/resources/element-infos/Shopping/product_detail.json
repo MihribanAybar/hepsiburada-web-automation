@@ -1,0 +1,24 @@
+{
+  "productTitle": {
+    "type": "css",
+    "value": "h1, [data-test-id='title']"
+  },
+  "addToCartButton": {
+    "type": "css",
+    "value": "#addToCart, button[data-test-id='addToCart'], [id*='addToCart']"
+  },
+  "productPriceLocators": [
+    {
+      "type": "css",
+      "value": "[data-test-id='default-price'] > div:first-child > span"
+    },
+    {
+      "type": "css",
+      "value": "div.bWwoI8vknB6COlRVbpRj"
+    }
+  ],
+  "addToCartConfirmation": {
+    "type": "css",
+    "value": "[data-test-class='modal_overflow'], div[class*='checkoutui-Modal'], div[class*='notification'], div[class*='toast'], [class*='hb-toast'], div[role='dialog'], div[class*='modal']"
+  }
+}

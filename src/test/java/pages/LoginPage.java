@@ -1,6 +1,7 @@
 package pages;
 
 import org.openqa.selenium.By;
+import support.LocatorReader;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.ElementClickInterceptedException;
@@ -24,17 +25,15 @@ public class LoginPage {
 
     // E-posta veya telefon giriş alanı
     private final By emailInput =
-            By.id("txtUserName");
+            LocatorReader.getLocator("Login/login.json", "emailInput");
 
     // Şifre giriş alanı
     private final By passwordInput =
-            By.id("txtPassword");
+            LocatorReader.getLocator("Login/login.json", "passwordInput");
 
     // Giriş yap butonu
     private final By submitButton =
-            By.cssSelector(
-                    "#btnLogin, button[type='submit']"
-            );
+            LocatorReader.getLocator("Login/login.json", "submitButton");
 
     public LoginPage(WebDriver driver) {
 

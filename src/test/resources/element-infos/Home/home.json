@@ -1,0 +1,22 @@
+{
+  "cookieAcceptBtn": {
+    "type": "id",
+    "value": "onetrust-accept-btn-handler"
+  },
+  "myAccountButton": {
+    "type": "id",
+    "value": "myAccount"
+  },
+  "loginItem": {
+    "type": "css",
+    "value": "#login, a[href*='giris.hepsiburada.com']"
+  },
+  "searchOpeningArea": {
+    "type": "css",
+    "value": "[role='search'][aria-label='Site İçi Arama']"
+  },
+  "activeSearchInput": {
+    "type": "css",
+    "value": "input[data-test-id='search-bar-input'][class*='searchBarContent-']"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headerCartCount": {
+    "type": "id",
+    "value": "cartItemCount"
+  },
+  "cartLink": {
+    "type": "css",
+    "value": "a[href*='checkout.hepsiburada.com/sepetim'], a[href*='/sepetim']"
+  },
+  "cookieAcceptBtn": {
+    "type": "id",
+    "value": "onetrust-accept-btn-handler"
+  },
+  "addToCartModal": {
+    "type": "css",
+    "value": "[data-test-class='modal_overflow']"
+  },
+  "modalGoToCartButton": {
+    "type": "xpath",
+    "value": "//*[normalize-space(.)='Sepete git' and not(.//*[normalize-space(.)='Sepete git'])]"
+  },
+  "deleteAllProductsButton": {
+    "type": "xpath",
+    "value": "//div[starts-with(@class,'basket_delete_') and normalize-space(.)='Ürünleri sil']"
+  },
+  "confirmDeleteAllButton": {
+    "type": "xpath",
+    "value": "//*[normalize-space(.)='Tümünü sil' and not(.//*[normalize-space(.)='Tümünü sil'])]"
+  },
+  "cartRowLocators": [
+    {
+      "type": "css",
+      "value": "[data-test-id='cart-item']"
+    },
+    {
+      "type": "css",
+      "value": "[data-test-id='basket-item']"
+    },
+    {
+      "type": "css",
+      "value": "[data-test-id='basket-item-container']"
+    },
+    {
+      "type": "css",
+      "value": "li[class*='basket_item']"
+    },
+    {
+      "type": "css",
+      "value": "div[class*='basket_item']"
+    },
+    {
+      "type": "css",
+      "value": "div[class*='BasketItem']"
+    },
+    {
+      "type": "css",
+      "value": "div[class*='CartItem']"
+    }
+  ],
+  "productName": {
+    "type": "css",
+    "value": "[data-test-id*='product-name'], [class*='product_name'], [class*='productName'], [class*='product_title'], [class*='itemTitle'], a[href*='-p-'], a[href*='/p/']"
+  },
+  "productPrice": {
+    "type": "css",
+    "value": "div[class^='product_price_'], div[class*=' product_price_']"
+  },
+  "quantitySelect": {
+    "type": "css",
+    "value": "select[name*='quantity'], select[class*='quantity'], select[data-test-id*='quantity']"
+  },
+  "quantityInput": {
+    "type": "css",
+    "value": "input[name*='quantity'], input[class*='quantity'], input[data-test-id*='quantity']"
+  },
+  "quantityText": {
+    "type": "css",
+    "value": "[data-test-id*='quantity'], [class*='quantityValue'], [class*='quantity-value']"
+  },
+  "modalClickableAncestor": {
+    "type": "xpath",
+    "value": "./ancestor-or-self::*[self::button or self::a or @role='button'][1]"
+  }
+}

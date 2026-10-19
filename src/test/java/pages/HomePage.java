@@ -2,6 +2,7 @@
 package pages;
 
 import org.openqa.selenium.By;
+import support.LocatorReader;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -32,16 +33,14 @@ public class HomePage {
 
     // Çerez kabul butonu
     private final By cookieAcceptBtn =
-            By.id("onetrust-accept-btn-handler");
+            LocatorReader.getLocator("Home/home.json", "cookieAcceptBtn");
 
     // Sağ üstteki hesap menüsü
     private final By myAccountButton =
-            By.id("myAccount");
+            LocatorReader.getLocator("Home/home.json", "myAccountButton");
 
     // Hesap menüsündeki giriş bağlantısı
-    private final By loginItem = By.cssSelector(
-            "#login, a[href*='giris.hepsiburada.com']"
-    );
+    private final By loginItem = LocatorReader.getLocator("Home/home.json", "loginItem");
 
     /*
      * AŞAMA 1:
@@ -55,9 +54,7 @@ public class HomePage {
      *
      * Bu alana tıklanınca geniş arama paneli açılır.
      */
-    private final By searchOpeningArea = By.cssSelector(
-            "[role='search'][aria-label='Site İçi Arama']"
-    );
+    private final By searchOpeningArea = LocatorReader.getLocator("Home/home.json", "searchOpeningArea");
 
     /*
      * AŞAMA 2:
@@ -72,10 +69,7 @@ public class HomePage {
      * İlk aşamadaki initialComponent input'u
      * bu locator ile seçilmez.
      */
-    private final By activeSearchInput = By.cssSelector(
-            "input[data-test-id='search-bar-input']" +
-                    "[class*='searchBarContent-']"
-    );
+    private final By activeSearchInput = LocatorReader.getLocator("Home/home.json", "activeSearchInput");
 
     public HomePage(WebDriver driver) {
 
